@@ -6,3 +6,4 @@ beautifulsoup4~=4.12.2
 torch~=2.0.1
 h5py~=3.9.0
 sentence-transformers
+pysrt

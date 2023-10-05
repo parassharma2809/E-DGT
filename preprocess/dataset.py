@@ -1,12 +1,14 @@
 import h5py
-import numpy as np
 import torch
-from torch import nn
 from torch.utils.data import DataLoader
 from torch.utils.data.dataset import Dataset
 from tqdm import tqdm
-from json_utils import load_json_l_qa
+from json_utils import load_json_l_qa, save_json, load_json
 from transformers import BertTokenizer
+import pysrt
+import os
+
+TRANSCRIPT_FOLDER_PATH = '../data/transcript'
 
 
 class SocialIQ2(Dataset):
@@ -14,43 +16,63 @@ class SocialIQ2(Dataset):
         self.raw_train = load_json_l_qa(opt.train_path)
         self.raw_test = load_json_l_qa(opt.test_path)
         self.raw_valid = load_json_l_qa(opt.valid_path)
+        self.video_to_transcripts_dict = {}
         self.vfeat_load = opt.vfeat
         if self.vfeat_load:
             self.vid_h5 = h5py.File(opt.vid_feat_path, "r", driver=opt.h5driver)
         self.vid_l = opt.max_vid_l
         self.mode = mode
-        self.cur_data_dict = self.get_cur_dict()
 
         # Tokenizer for BERT embeddings
-        # self.word2idx_path = opt.word2idx_path
-        # self.idx2word_path = opt.idx2word_path
-        # self.vocab_embedding_path = opt.vocab_embedding_path
         self.embedding_dim = opt.embedding_size
         self.tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-        # self.word2idx = {"<pad>": 0, "<unk>": 1, "<eos>": 2}
-        # self.idx2word = {0: "<pad>", 1: "<unk>", 2: "<eos>"}
-        # self.offset = len(self.word2idx)
 
         # set entry keys
-        # self.text_keys = ["q", "a0", "a1", "a2", "a3", "transcript_text"]
-        self.text_keys = ["q", "a0", "a1", "a2", "a3"]
+        self.text_keys = ["q", "a0", "a1", "a2", "a3", "transcript"]
+        # self.text_keys = ["q", "a0", "a1", "a2", "a3"]
         self.label_key = "answer_idx"
         self.qid_key = "qid"
         self.vid_name_key = "vid_name"
 
-        # build/load vocabulary
-        # if not files_exist([self.word2idx_path, self.idx2word_path, self.vocab_embedding_path]):
-        #     print("\nNo cache founded.")
-        #     self.build_word_vocabulary(word_count_threshold=opt.word_count_threshold)
-        # else:
-        #     print("\nLoading cache ...")
-        #     self.word2idx = load_pickle(self.word2idx_path)
-        #     self.idx2word = load_pickle(self.idx2word_path)
-        #     self.vocab_embedding = load_pickle(self.vocab_embedding_path)
+        # Build transcript video dict if it doesn't exist
+        if not os.path.exists('video_to_transcripts.json'):
+            self.build_transcript_video_dict()
+        else:
+            print('Loading transcripts from cache')
+            self.video_to_transcripts_dict = load_json('video_to_transcripts.json')
+
+        # Add transcripts to the data
+        self.add_transcripts_to_data()
+
+        self.cur_data_dict = self.get_cur_dict()
 
     def set_mode(self, mode):
         self.mode = mode
         self.cur_data_dict = self.get_cur_dict()
+
+    def build_transcript_video_dict(self):
+        for file in tqdm(os.listdir(TRANSCRIPT_FOLDER_PATH)):
+            if file.endswith('.vtt'):
+                subs = pysrt.open(f'{TRANSCRIPT_FOLDER_PATH}/{file}')
+                sub_text = '\n'.join(
+                    [f'{sub.start.minutes}:{sub.start.seconds}-{sub.end.minutes}:{sub.end.seconds}: {sub.text}' for sub
+                     in
+                     subs])
+                self.video_to_transcripts_dict[file.split('.')[0]] = sub_text
+        with open('video_to_transcripts.json', 'w') as f:
+            save_json(self.video_to_transcripts_dict, f)
+
+    def add_transcript_to_dict(self, data_dict):
+        for k, v in data_dict.items():
+            if v['vid_name'] in self.video_to_transcripts_dict.keys():
+                data_dict[k]['transcript'] = self.video_to_transcripts_dict[v['vid_name']]
+            else:
+                data_dict[k]['transcript'] = ''
+
+    def add_transcripts_to_data(self):
+        self.add_transcript_to_dict(self.raw_train)
+        self.add_transcript_to_dict(self.raw_valid)
+        self.add_transcript_to_dict(self.raw_test)
 
     def get_cur_dict(self):
         if self.mode == 'train':
@@ -90,54 +112,7 @@ class SocialIQ2(Dataset):
         return items
 
     def tokenize(self, line):
-        return torch.tensor([self.tokenizer.encode(line)])
-
-    # def numericalize(self, sentence, eos=True):
-    #     """convert words to indices"""
-    #     sentence_indices = [self.word2idx[w] if w in self.word2idx else self.word2idx["<unk>"]
-    #                         for w in self.line_to_words(sentence, eos=eos)]  # 1 is <unk>, unknown
-    #     return sentence_indices
-
-    # def build_word_vocabulary(self, word_count_threshold=0):
-    #     """borrowed this implementation from @karpathy's neuraltalk."""
-    #     print("Building word vocabulary starts.\n")
-    #     all_sentences = []
-    #     for k in self.text_keys:
-    #         all_sentences.extend([ele[k] for ele in self.raw_train])
-    #
-    #     word_counts = {}
-    #     for sentence in all_sentences:
-    #         for w in self.line_to_words(sentence, eos=False, downcase=True):
-    #             word_counts[w] = word_counts.get(w, 0) + 1
-    #
-    #     vocab = [w for w in word_counts if word_counts[w] >= word_count_threshold and w not in self.word2idx.keys()]
-    #     print("Vocabulary Size %d (<pad> <unk> <eos> excluded) using word_count_threshold %d.\n" %
-    #           (len(vocab), word_count_threshold))
-    #
-    #     # build index and vocabularies
-    #     for idx, w in enumerate(vocab):
-    #         self.word2idx[w] = idx + self.offset
-    #         self.idx2word[idx + self.offset] = w
-    #     print("word2idx size: %d, idx2word size: %d.\n" % (len(self.word2idx), len(self.idx2word)))
-    #
-    #     # Make glove embedding.
-    #     print("Loading glove embedding at path : %s. \n" % self.glove_embedding_path)
-    #     glove_full = self.load_glove(self.glove_embedding_path)
-    #     print("Glove Loaded, building word2idx, idx2word mapping. This may take a while.\n")
-    #     glove_matrix = np.zeros([len(self.idx2word), self.embedding_dim])
-    #     glove_keys = glove_full.keys()
-    #     for i in tqdm(range(len(self.idx2word))):
-    #         w = self.idx2word[i]
-    #         w_embed = glove_full[w] if w in glove_keys else np.random.randn(self.embedding_dim) * 0.4
-    #         glove_matrix[i, :] = w_embed
-    #     self.vocab_embedding = glove_matrix
-    #     print("Vocab embedding size is :", glove_matrix.shape)
-    #
-    #     print("Saving cache files ...\n")
-    #     save_pickle(self.word2idx, self.word2idx_path)
-    #     save_pickle(self.idx2word, self.idx2word_path)
-    #     save_pickle(glove_matrix, self.vocab_embedding_path)
-    #     print("Building  vocabulary done.\n")
+        return torch.tensor([self.tokenizer.encode(line, truncation=True, max_length=512)])
 
 
 class Batch(object):
@@ -156,6 +131,7 @@ class Batch(object):
 
 def pad_collate(data, opt):
     """Creates mini-batch tensors from the list of tuples (src_seq, trg_seq)."""
+
     def pad_sequences(sequences, k):
         sequences = [torch.LongTensor(s).squeeze() for s in sequences]
         lengths = torch.LongTensor([len(seq) for seq in sequences])
@@ -181,8 +157,7 @@ def pad_collate(data, opt):
 
     # separate source and target sequences
     column_data = list(zip(*data))
-    # text_keys = ["q", "a0", "a1", "a2", "a3", "transcript"]
-    text_keys = ["q", "a0", "a1", "a2", "a3"]
+    text_keys = ["q", "a0", "a1", "a2", "a3", "transcript"]
     label_key = "answer_idx"
     qid_key = "qid"
     vid_name_key = "vid_name"
@@ -206,8 +181,7 @@ def pad_collate(data, opt):
 def preprocess_inputs(batched_data, max_transcript_l, max_vid_l, device="cuda:0"):
     """clip and move to target device"""
     max_len_dict = {"transcript": max_transcript_l, "vid": max_vid_l}
-    # text_keys = ["q", "a0", "a1", "a2", "a3", "transcript"]
-    text_keys = ["q", "a0", "a1", "a2", "a3"]
+    text_keys = ["q", "a0", "a1", "a2", "a3", "transcript"]
     label_key = "answer_idx"
     qid_key = "qid"
     vid_feat_key = "vid"
@@ -226,16 +200,17 @@ def preprocess_inputs(batched_data, max_transcript_l, max_vid_l, device="cuda:0"
     target_data = getattr(batched_data, label_key)
     target_data = target_data.to(device)
     qid_data = getattr(batched_data, qid_key)
-    # print(model_in_list)
     return model_in_list, target_data, qid_data
 
 
 if __name__ == "__main__":
     import sys
     from config import BaseOptions
+
     sys.argv[1:] = ["--input_streams", "transcript"]
     opt = BaseOptions().parse()
 
+    # We will ignore the test mode for now as we don't have answer index for test split
     dset = SocialIQ2(opt, mode="valid")
     data_loader = DataLoader(dset, batch_size=10, shuffle=False, collate_fn=lambda b: pad_collate(b, opt))
 

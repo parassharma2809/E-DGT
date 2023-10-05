@@ -6,6 +6,13 @@ def save_json(file_name, json_object):
         json.dump(json_object, f, indent=3)
 
 
+def save_json_l(file_name, json_l_object):
+    with open(file_name, 'w') as f:
+        for obj in json_l_object:
+            json.dump(obj, f)
+            f.write('\n')
+
+
 def load_json(file_name):
     with open(file_name, 'r') as f:
         json_obj = json.load(f)

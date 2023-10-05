@@ -35,11 +35,11 @@ class BaseOptions(object):
         self.parser.add_argument("--vocab_size", type=int, default=0, help="vocabulary size")
 
         # path config
-        self.parser.add_argument("--train_path", type=str, default="../data/qa/qa_train.json",
+        self.parser.add_argument("--train_path", type=str, default="../data/qa/qa_train_processed.jsonl",
                                  help="train set path")
-        self.parser.add_argument("--valid_path", type=str, default="../data/qa/qa_val.json",
+        self.parser.add_argument("--valid_path", type=str, default="../data/qa/qa_val_processed.jsonl",
                                  help="valid set path")
-        self.parser.add_argument("--test_path", type=str, default="../data/qa/qa_test.json",
+        self.parser.add_argument("--test_path", type=str, default="../data/qa/qa_test_processed.jsonl",
                                  help="test set path")
         self.parser.add_argument("--vid_feat_size", type=int, default=2048,
                                  help="visual feature dimension")
@@ -88,6 +88,7 @@ class TestOptions(BaseOptions):
     def initialize(self):
         BaseOptions.initialize(self)
         self.parser.add_argument("--model_dir", type=str, help="dir contains the model file")
+        # We will ignore the test mode for now as we don't have answer index for test split
         self.parser.add_argument("--mode", type=str, default="valid", help="valid/test")
 
 
