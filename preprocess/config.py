@@ -13,7 +13,7 @@ class BaseOptions(object):
     def initialize(self):
         # Basic Training/Testing config
         self.parser.add_argument("--debug", action="store_true", help="debug mode, break all loops")
-        self.parser.add_argument("--results_dir_base", type=str, default="results/results")
+        self.parser.add_argument("--results_dir_base", type=str, default="../results/results")
         self.parser.add_argument("--log_freq", type=int, default=400, help="print, save training info")
         self.parser.add_argument("--lr", type=float, default=5e-5, help="learning rate")
         self.parser.add_argument("--wd", type=float, default=1e-5, help="weight decay")
@@ -24,6 +24,8 @@ class BaseOptions(object):
         self.parser.add_argument("--device", type=int, default=0, help="gpu ordinal, -1 indicates cpu")
         self.parser.add_argument("--no_core_driver", action="store_true",
                                  help="hdf5 driver, default use `core` (load into RAM), if specified, use `None`")
+        self.parser.add_argument("--input_streams", type=str, nargs="+", choices=["transcript", "audio", "video"],
+                                 help="input streams for the model")
 
         # model config
         self.parser.add_argument("--num_layers", type=int, default=1, help="number of layers in classifier")
@@ -33,11 +35,11 @@ class BaseOptions(object):
         self.parser.add_argument("--vocab_size", type=int, default=0, help="vocabulary size")
 
         # path config
-        self.parser.add_argument("--train_path", type=str, default="data/qa/qa_train.json",
+        self.parser.add_argument("--train_path", type=str, default="../data/qa/qa_train.json",
                                  help="train set path")
-        self.parser.add_argument("--valid_path", type=str, default="data/qa/qa_val.json",
+        self.parser.add_argument("--valid_path", type=str, default="../data/qa/qa_val.json",
                                  help="valid set path")
-        self.parser.add_argument("--test_path", type=str, default="data/qa/qa_test.json",
+        self.parser.add_argument("--test_path", type=str, default="../data/qa/qa_test.json",
                                  help="test set path")
         self.parser.add_argument("--vid_feat_size", type=int, default=2048,
                                  help="visual feature dimension")
@@ -73,6 +75,8 @@ class BaseOptions(object):
                 os.makedirs(results_dir)
             self.display_save(opt, results_dir)
 
+        opt.input_streams = [] if opt.input_streams is None else opt.input_streams
+        opt.vfeat = True if "video" in opt.input_streams else False
         opt.results_dir = results_dir
         self.opt = opt
         return opt
