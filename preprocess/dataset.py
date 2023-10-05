@@ -29,7 +29,6 @@ class SocialIQ2(Dataset):
 
         # set entry keys
         self.text_keys = ["q", "a0", "a1", "a2", "a3", "transcript"]
-        # self.text_keys = ["q", "a0", "a1", "a2", "a3"]
         self.label_key = "answer_idx"
         self.qid_key = "qid"
         self.vid_name_key = "vid_name"
