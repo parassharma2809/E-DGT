@@ -1,7 +1,7 @@
 import os
 import time
 import argparse
-from json_utils import save_json, load_json
+from .json_utils import save_json, load_json
 
 
 class BaseOptions(object):
@@ -13,7 +13,7 @@ class BaseOptions(object):
     def initialize(self):
         # Basic Training/Testing config
         self.parser.add_argument("--debug", action="store_true", help="debug mode, break all loops")
-        self.parser.add_argument("--results_dir_base", type=str, default="../results/results")
+        self.parser.add_argument("--results_dir_base", type=str, default="results/results")
         self.parser.add_argument("--log_freq", type=int, default=400, help="print, save training info")
         self.parser.add_argument("--lr", type=float, default=5e-5, help="learning rate")
         self.parser.add_argument("--wd", type=float, default=1e-5, help="weight decay")
@@ -29,17 +29,19 @@ class BaseOptions(object):
 
         # model config
         self.parser.add_argument("--num_layers", type=int, default=1, help="number of layers in classifier")
-        self.parser.add_argument("--embedding_size", type=int, default=300, help="word embedding dim")
-        self.parser.add_argument("--max_transcript_l", type=int, default=300, help="max length for transcripts")
+        self.parser.add_argument("--embedding_size", type=int, default=768, help="word embedding dim")
+        self.parser.add_argument("--max_transcript_l", type=int, default=512, help="max length for transcripts")
         self.parser.add_argument("--max_vid_l", type=int, default=480, help="max length for video feature")
         self.parser.add_argument("--vocab_size", type=int, default=0, help="vocabulary size")
+        self.parser.add_argument("--num_heads", type=int, default=3, help="Number of heads for cross attention "
+                                                                          "transformer")
 
         # path config
-        self.parser.add_argument("--train_path", type=str, default="../data/qa/qa_train_processed.jsonl",
+        self.parser.add_argument("--train_path", type=str, default="data/qa/qa_train_processed.jsonl",
                                  help="train set path")
-        self.parser.add_argument("--valid_path", type=str, default="../data/qa/qa_val_processed.jsonl",
+        self.parser.add_argument("--valid_path", type=str, default="data/qa/qa_val_processed.jsonl",
                                  help="valid set path")
-        self.parser.add_argument("--test_path", type=str, default="../data/qa/qa_test_processed.jsonl",
+        self.parser.add_argument("--test_path", type=str, default="data/qa/qa_test_processed.jsonl",
                                  help="test set path")
         self.parser.add_argument("--vid_feat_size", type=int, default=2048,
                                  help="visual feature dimension")

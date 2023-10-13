@@ -1,14 +1,16 @@
+import json
+
 import h5py
 import torch
 from torch.utils.data import DataLoader
 from torch.utils.data.dataset import Dataset
 from tqdm import tqdm
-from json_utils import load_json_l_qa, save_json, load_json
+from .json_utils import load_json_l_qa, save_json, load_json
 from transformers import BertTokenizer
 import pysrt
 import os
 
-TRANSCRIPT_FOLDER_PATH = '../data/transcript'
+TRANSCRIPT_FOLDER_PATH = 'data/transcript'
 
 
 class SocialIQ2(Dataset):
@@ -34,11 +36,11 @@ class SocialIQ2(Dataset):
         self.vid_name_key = "vid_name"
 
         # Build transcript video dict if it doesn't exist
-        if not os.path.exists('video_to_transcripts.json'):
+        if not os.path.exists('preprocess/video_to_transcripts.json'):
             self.build_transcript_video_dict()
         else:
             print('Loading transcripts from cache')
-            self.video_to_transcripts_dict = load_json('video_to_transcripts.json')
+            self.video_to_transcripts_dict = load_json('preprocess/video_to_transcripts.json')
 
         # Add transcripts to the data
         self.add_transcripts_to_data()
@@ -58,8 +60,8 @@ class SocialIQ2(Dataset):
                      in
                      subs])
                 self.video_to_transcripts_dict[file.split('.')[0]] = sub_text
-        with open('video_to_transcripts.json', 'w') as f:
-            save_json(self.video_to_transcripts_dict, f)
+        with open('preprocess/video_to_transcripts.json', 'w') as f:
+            json.dump(self.video_to_transcripts_dict, f)
 
     def add_transcript_to_dict(self, data_dict):
         for k, v in data_dict.items():
@@ -135,12 +137,24 @@ def pad_collate(data, opt):
         sequences = [torch.LongTensor(s).squeeze() for s in sequences]
         lengths = torch.LongTensor([len(seq) for seq in sequences])
         padded_seqs = torch.zeros(len(sequences), max(lengths)).long()
+        # print(k)
+        # print(len(sequences))
+        # print(sequences[0].size())
+        # print(lengths.size())
+        # print(padded_seqs.size())
         if k == 'transcript':
             padded_seqs = torch.zeros(len(sequences), opt.max_transcript_l).long()
-            lengths = torch.LongTensor([opt.max_transcript_l for _ in sequences])
+        # print(padded_seqs.size())
         for idx, seq in enumerate(sequences):
             end = lengths[idx]
+            if k == 'transcript':
+                end = min(end, opt.max_transcript_l)
+            # print(end)
+            # print(seq.size())
+            # print(padded_seqs[idx].size())
             padded_seqs[idx, :end] = seq[:end]
+        if k == 'transcript':
+            lengths = torch.LongTensor([opt.max_transcript_l for _ in sequences])
         return padded_seqs, lengths
 
     def pad_video_sequences(sequences):

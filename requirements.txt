@@ -7,3 +7,4 @@ torch~=2.0.1
 h5py~=3.9.0
 sentence-transformers
 pysrt
+tensorboardX
