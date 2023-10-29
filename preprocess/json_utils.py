@@ -35,3 +35,9 @@ def load_pickle(file_name):
     with open(file_name, 'rb') as f:
         pkl_obj = pkl.load(f)
     return pkl_obj
+
+
+def merge_two_dicts(x, y):
+    z = x.copy()
+    z.update(y)
+    return z
