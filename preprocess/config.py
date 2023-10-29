@@ -35,6 +35,11 @@ class BaseOptions(object):
         self.parser.add_argument("--vocab_size", type=int, default=0, help="vocabulary size")
         self.parser.add_argument("--num_heads", type=int, default=3, help="Number of heads for cross attention "
                                                                           "transformer")
+        self.parser.add_argument("--vid_feat_size", type=int, default=2048, help="video feature size")
+        self.parser.add_argument("--vid_num_regions", type=int, default=32, help="Reduced video feature dimension")
+        self.parser.add_argument("--num_transformer_layers", type=int, default=3, help="Number of layers of stacked "
+                                                                                       "transformer blocks")
+        self.parser.add_argument("--audio_dim", type=int, default=68, help="Covarep Feature dimensions")
 
         # path config
         self.parser.add_argument("--train_path", type=str, default="data/qa/qa_train_processed.jsonl",
@@ -43,8 +48,8 @@ class BaseOptions(object):
                                  help="valid set path")
         self.parser.add_argument("--test_path", type=str, default="data/qa/qa_test_processed.jsonl",
                                  help="test set path")
-        self.parser.add_argument("--vid_feat_size", type=int, default=2048,
-                                 help="visual feature dimension")
+        self.parser.add_argument("--audio_feat_path", type=str, default="data/audio/extracted_features",
+                                 help="Path for audio features")
         self.initialized = True
 
     def display_save(self, options, results_dir):
@@ -79,6 +84,7 @@ class BaseOptions(object):
 
         opt.input_streams = [] if opt.input_streams is None else opt.input_streams
         opt.vfeat = True if "video" in opt.input_streams else False
+        opt.afeat = True if 'audio' in opt.input_streams else False
         opt.results_dir = results_dir
         self.opt = opt
         return opt

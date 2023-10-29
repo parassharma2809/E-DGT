@@ -5,12 +5,16 @@ import torch
 from torch.utils.data import DataLoader
 from torch.utils.data.dataset import Dataset
 from tqdm import tqdm
-from .json_utils import load_json_l_qa, save_json, load_json
+from .json_utils import load_json_l_qa, save_json, load_json, load_pickle
 from transformers import BertTokenizer
 import pysrt
 import os
+import pandas as pd
+import numpy as np
+import pickle as pkl
 
 TRANSCRIPT_FOLDER_PATH = 'data/transcript'
+AUDIO_FEATURES_PATH = 'data/audio/extracted_features'
 
 
 class SocialIQ2(Dataset):
@@ -19,6 +23,7 @@ class SocialIQ2(Dataset):
         self.raw_test = load_json_l_qa(opt.test_path)
         self.raw_valid = load_json_l_qa(opt.valid_path)
         self.video_to_transcripts_dict = {}
+        self.video_to_audio_dict = {}
         self.vfeat_load = opt.vfeat
         if self.vfeat_load:
             self.vid_h5 = h5py.File(opt.vid_feat_path, "r", driver=opt.h5driver)
@@ -33,6 +38,7 @@ class SocialIQ2(Dataset):
         self.text_keys = ["q", "a0", "a1", "a2", "a3", "transcript"]
         self.label_key = "answer_idx"
         self.qid_key = "qid"
+        self.audio_key = 'audio'
         self.vid_name_key = "vid_name"
 
         # Build transcript video dict if it doesn't exist
@@ -45,6 +51,15 @@ class SocialIQ2(Dataset):
         # Add transcripts to the data
         self.add_transcripts_to_data()
 
+        self.audio_feat_load = opt.afeat
+        if self.audio_feat_load:
+            if not os.path.exists('preprocess/audio_feat_dict.pkl'):
+                self.build_audio_video_dict()
+            else:
+                print('Loading audio features from Cache')
+                self.video_to_audio_dict = load_pickle('preprocess/audio_feat_dict.pkl')
+            self.add_audio_to_data()
+
         self.cur_data_dict = self.get_cur_dict()
 
     def set_mode(self, mode):
@@ -52,6 +67,7 @@ class SocialIQ2(Dataset):
         self.cur_data_dict = self.get_cur_dict()
 
     def build_transcript_video_dict(self):
+        print('Building Video to Transcript Dictionary')
         for file in tqdm(os.listdir(TRANSCRIPT_FOLDER_PATH)):
             if file.endswith('.vtt'):
                 subs = pysrt.open(f'{TRANSCRIPT_FOLDER_PATH}/{file}')
@@ -62,6 +78,17 @@ class SocialIQ2(Dataset):
                 self.video_to_transcripts_dict[file.split('.')[0]] = sub_text
         with open('preprocess/video_to_transcripts.json', 'w') as f:
             json.dump(self.video_to_transcripts_dict, f)
+
+    def build_audio_video_dict(self):
+        print('Building Video to Audio Dictionary')
+        for p in tqdm(os.listdir(AUDIO_FEATURES_PATH)):
+            if p.endswith('.csv'):
+                df = pd.read_csv(f'{AUDIO_FEATURES_PATH}/{p}')
+                ra = [row.values for _, row in df.iterrows()]
+                ra = np.array(ra)
+                self.video_to_audio_dict[p.split('.csv')[0]] = ra
+        with open('preprocess/audio_feat_dict.pkl', 'wb') as f:
+            pkl.dump(self.video_to_audio_dict, f)
 
     def add_transcript_to_dict(self, data_dict):
         for k, v in data_dict.items():
@@ -74,6 +101,18 @@ class SocialIQ2(Dataset):
         self.add_transcript_to_dict(self.raw_train)
         self.add_transcript_to_dict(self.raw_valid)
         self.add_transcript_to_dict(self.raw_test)
+
+    def add_audio_to_dict(self, data_dict):
+        for k, v in data_dict.items():
+            if v['vid_name'] in self.video_to_audio_dict.keys():
+                data_dict[k]['audio'] = self.video_to_audio_dict[v['vid_name']]
+            else:
+                data_dict[k]['audio'] = np.zeros((2, 2))
+
+    def add_audio_to_data(self):
+        self.add_audio_to_dict(self.raw_train)
+        self.add_audio_to_dict(self.raw_valid)
+        self.add_audio_to_dict(self.raw_test)
 
     def get_cur_dict(self):
         if self.mode == 'train':
@@ -110,6 +149,13 @@ class SocialIQ2(Dataset):
         else:
             cur_vid_feat = torch.zeros([2, 2])  # dummy placeholder
         items.append(cur_vid_feat)
+
+        if self.audio_feat_load:
+            cur_audio_feat = torch.from_numpy(self.video_to_audio_dict[cur_vid_name])
+        else:
+            cur_audio_feat = torch.zeros([2, 2])  # dummy placeholder
+        items.append(cur_audio_feat)
+
         return items
 
     def tokenize(self, line):
@@ -168,6 +214,16 @@ def pad_collate(data, opt):
         lengths = torch.LongTensor([opt.max_transcript_l for _ in sequences])
         return padded_seqs, lengths
 
+    def pad_audio_sequences(sequences):
+        lengths = torch.LongTensor([len(seq) for seq in sequences])
+        a_dim = sequences[0].size(1)
+        padded_seqs = torch.zeros(len(sequences), max(lengths), a_dim).float()
+        for idx, seq in enumerate(sequences):
+            end = lengths[idx]
+            padded_seqs[idx, :end] = seq
+
+        return padded_seqs, lengths
+
     # separate source and target sequences
     column_data = list(zip(*data))
     text_keys = ["q", "a0", "a1", "a2", "a3", "transcript"]
@@ -175,7 +231,8 @@ def pad_collate(data, opt):
     qid_key = "qid"
     vid_name_key = "vid_name"
     vid_feat_key = "vid"
-    all_keys = text_keys + [label_key, qid_key, vid_name_key, vid_feat_key]
+    audio_feat_key = 'audio'
+    all_keys = text_keys + [label_key, qid_key, vid_name_key, vid_feat_key, audio_feat_key]
     all_values = []
     for i, k in enumerate(all_keys):
         if k in text_keys:
@@ -184,6 +241,8 @@ def pad_collate(data, opt):
             all_values.append(torch.LongTensor(column_data[i]))
         elif k == vid_feat_key:
             all_values.append(pad_video_sequences(column_data[i]))
+        elif k == audio_feat_key:
+            all_values.append(pad_audio_sequences(column_data[i]))
         else:
             all_values.append(column_data[i])
 
@@ -198,8 +257,9 @@ def preprocess_inputs(batched_data, max_transcript_l, max_vid_l, device="cuda:0"
     label_key = "answer_idx"
     qid_key = "qid"
     vid_feat_key = "vid"
+    audio_feat_key = 'audio'
     model_in_list = []
-    for k in text_keys + [vid_feat_key]:
+    for k in text_keys + [vid_feat_key, audio_feat_key]:
         v = getattr(batched_data, k)
         if k in max_len_dict:
             ctx, ctx_l = v

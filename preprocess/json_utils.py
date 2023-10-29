@@ -1,4 +1,5 @@
 import json
+import pickle as pkl
 
 
 def save_json(file_name, json_object):
@@ -28,3 +29,9 @@ def load_json_l_qa(file_name):
             json_obj[i] = temp
             i += 1
     return json_obj
+
+
+def load_pickle(file_name):
+    with open(file_name, 'rb') as f:
+        pkl_obj = pkl.load(f)
+    return pkl_obj

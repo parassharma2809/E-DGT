@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from tensorboardX import SummaryWriter
 
-from models.transcript_fusion import TranscriptFusion
+from models.audio_transcript_fusion import AudioTranscriptFusion
 from preprocess.dataset import SocialIQ2, pad_collate, preprocess_inputs
 from preprocess.config import BaseOptions
 
@@ -119,7 +119,7 @@ if __name__ == "__main__":
     opt.writer = writer
 
     dset = SocialIQ2(opt)
-    model = TranscriptFusion(opt)
+    model = AudioTranscriptFusion(opt)
     cudnn.benchmark = True
     criterion = nn.CrossEntropyLoss(reduction='sum')
     optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()),
