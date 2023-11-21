@@ -1,5 +1,5 @@
 from torch import nn
-from .mlp import MLP
+from mlp import MLP
 
 
 class CrossAttention(nn.Module):

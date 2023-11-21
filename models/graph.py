@@ -2,6 +2,7 @@ import torch
 from torch import nn
 from torch.nn.parameter import Parameter
 import torch.nn.functional as F
+from torch.autograd import Variable
 
 
 class Graph(nn.Module):
@@ -26,6 +27,23 @@ class Graph(nn.Module):
             X = F.relu(layer(X, A))
             X = F.dropout(X, self.dropout, training=self.training)
         return X
+
+    def build_graph(self, x):
+        bsz, seq_len = x.shape[0], x.shape[1]
+        x_rep1 = self.fc_1(x)
+        x_rep2 = self.fc_2(x)
+        length = torch.tensor([seq_len] * bsz, dtype=torch.long)
+
+        adj_mat = torch.bmm(x_rep1, x_rep2.transpose(1, 2))
+        mask = adj_mat.data.new(*adj_mat.size()).fill_(1).bool()
+        # initializing similarity masks using lengths
+        for i, (l1, l2) in enumerate(zip(length, length)):
+            mask[i][:l1, :l2] = 0
+        mask = Variable(mask)
+        adj_mat.data.masked_fill_(mask.data, -float("inf"))
+        adj_mat = F.softmax(adj_mat, dim=2)
+        adj_mat.data.masked_fill_(adj_mat.data != adj_mat.data, 0)
+        return adj_mat
 
 
 class GraphConvolution(nn.Module):
